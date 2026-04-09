@@ -98,7 +98,8 @@ function Download-File {
     }
 
     if (Get-Command curl.exe -ErrorAction SilentlyContinue) {
-        & curl.exe -L --fail --output $OutFile $Url
+        $curlCommand = 'curl.exe -L --fail --output "{0}" "{1}"' -f $OutFile, $Url
+        & cmd.exe /d /c $curlCommand
         if ($LASTEXITCODE -eq 0) {
             return
         }
