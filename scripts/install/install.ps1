@@ -1,6 +1,8 @@
 param(
     [Parameter(Position=0)]
-    [string]$Version = "latest"
+    [string]$Version = "latest",
+    [string]$Repo = "openai/codex",
+    [string]$ReleasePrefix = "rust-v"
 )
 
 Set-StrictMode -Version Latest
@@ -41,7 +43,7 @@ function Get-ReleaseUrl {
         [string]$ResolvedVersion
     )
 
-    return "https://github.com/openai/codex/releases/download/rust-v$ResolvedVersion/$AssetName"
+    return "https://github.com/$Repo/releases/download/$ReleasePrefix$ResolvedVersion/$AssetName"
 }
 
 function Path-Contains {
@@ -70,7 +72,7 @@ function Resolve-Version {
         return $normalizedVersion
     }
 
-    $release = Invoke-RestMethod -Uri "https://api.github.com/repos/openai/codex/releases/latest"
+    $release = Invoke-RestMethod -Uri "https://api.github.com/repos/$Repo/releases/latest"
     if (-not $release.tag_name) {
         Write-Error "Failed to resolve the latest Codex release version."
         exit 1
@@ -127,34 +129,63 @@ New-Item -ItemType Directory -Force -Path $installDir | Out-Null
 $resolvedVersion = Resolve-Version
 Write-Step "Resolved version: $resolvedVersion"
 $packageAsset = "codex-npm-$npmTag-$resolvedVersion.tgz"
+$zipAsset = "codex-$target.exe.zip"
 
 $tempDir = Join-Path ([System.IO.Path]::GetTempPath()) ("codex-install-" + [System.Guid]::NewGuid().ToString("N"))
 New-Item -ItemType Directory -Force -Path $tempDir | Out-Null
 
 try {
     $archivePath = Join-Path $tempDir $packageAsset
+    $zipPath = Join-Path $tempDir $zipAsset
     $extractDir = Join-Path $tempDir "extract"
-    $url = Get-ReleaseUrl -AssetName $packageAsset -ResolvedVersion $resolvedVersion
-
-    Write-Step "Downloading Codex CLI"
-    Invoke-WebRequest -Uri $url -OutFile $archivePath
 
     New-Item -ItemType Directory -Force -Path $extractDir | Out-Null
-    tar -xzf $archivePath -C $extractDir
 
-    $vendorRoot = Join-Path $extractDir "package/vendor/$target"
-    Write-Step "Installing to $installDir"
-    $copyMap = @{
-        "codex/codex.exe" = "codex.exe"
-        "codex/codex-command-runner.exe" = "codex-command-runner.exe"
-        "codex/codex-windows-sandbox-setup.exe" = "codex-windows-sandbox-setup.exe"
-        "path/rg.exe" = "rg.exe"
-    }
+    $packageUrl = Get-ReleaseUrl -AssetName $packageAsset -ResolvedVersion $resolvedVersion
+    $zipUrl = Get-ReleaseUrl -AssetName $zipAsset -ResolvedVersion $resolvedVersion
 
-    foreach ($relativeSource in $copyMap.Keys) {
-        $sourcePath = Join-Path $vendorRoot $relativeSource
-        $destinationPath = Join-Path $installDir $copyMap[$relativeSource]
-        Move-Item -Force $sourcePath $destinationPath
+    try {
+        Write-Step "Downloading Codex CLI package from $Repo"
+        Invoke-WebRequest -Uri $packageUrl -OutFile $archivePath
+        tar -xzf $archivePath -C $extractDir
+
+        $vendorRoot = Join-Path $extractDir "package/vendor/$target"
+        Write-Step "Installing to $installDir"
+        $copyMap = @{
+            "codex/codex.exe" = "codex.exe"
+            "codex/codex-command-runner.exe" = "codex-command-runner.exe"
+            "codex/codex-windows-sandbox-setup.exe" = "codex-windows-sandbox-setup.exe"
+            "path/rg.exe" = "rg.exe"
+        }
+
+        foreach ($relativeSource in $copyMap.Keys) {
+            $sourcePath = Join-Path $vendorRoot $relativeSource
+            if (-not (Test-Path $sourcePath)) {
+                continue
+            }
+            $destinationPath = Join-Path $installDir $copyMap[$relativeSource]
+            Move-Item -Force $sourcePath $destinationPath
+        }
+    } catch {
+        Write-Step "Package asset unavailable, falling back to portable zip from $Repo"
+        Invoke-WebRequest -Uri $zipUrl -OutFile $zipPath
+        Expand-Archive -Path $zipPath -DestinationPath $extractDir -Force
+
+        $copyMap = @{
+            "codex.exe" = "codex.exe"
+            "codex-command-runner.exe" = "codex-command-runner.exe"
+            "codex-windows-sandbox-setup.exe" = "codex-windows-sandbox-setup.exe"
+            "rg.exe" = "rg.exe"
+        }
+
+        foreach ($relativeSource in $copyMap.Keys) {
+            $sourcePath = Join-Path $extractDir $relativeSource
+            if (-not (Test-Path $sourcePath)) {
+                continue
+            }
+            $destinationPath = Join-Path $installDir $copyMap[$relativeSource]
+            Move-Item -Force $sourcePath $destinationPath
+        }
     }
 } finally {
     Remove-Item -Recurse -Force $tempDir -ErrorAction SilentlyContinue

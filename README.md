@@ -39,10 +39,39 @@ Each GitHub Release contains many executables, but in practice, you likely want 
 - Linux
   - x86_64: `codex-x86_64-unknown-linux-musl.tar.gz`
   - arm64: `codex-aarch64-unknown-linux-musl.tar.gz`
+- Windows
+  - x86_64: `codex-x86_64-pc-windows-msvc.exe.zip`
+  - ARM64: `codex-aarch64-pc-windows-msvc.exe.zip`
 
 Each archive contains a single entry with the platform baked into the name (e.g., `codex-x86_64-unknown-linux-musl`), so you likely want to rename it to `codex` after extracting it.
 
+For Windows users who cannot access Microsoft Store, the CLI release assets are enough. You can also run the PowerShell installer directly:
+
+```powershell
+$script = Join-Path $env:TEMP "install-codex.ps1"
+irm https://raw.githubusercontent.com/openai/codex/main/scripts/install/install.ps1 -OutFile $script
+& $script
+```
+
 </details>
+
+### Windows no-store release from your own fork
+
+This fork includes `.github/workflows/fork-release-windows-cli.yml` for maintainers who want to publish a Windows CLI build without relying on Microsoft Store or OpenAI's internal signing runners. Trigger the workflow manually from GitHub Actions with a version like `0.118.0`, then install from your fork release:
+
+```powershell
+$script = Join-Path $env:TEMP "install-codex.ps1"
+irm https://raw.githubusercontent.com/daxiondi/codex/main/scripts/install/install.ps1 -OutFile $script
+& $script -Repo daxiondi/codex
+```
+
+To pin to your own repository or a specific version:
+
+```powershell
+$script = Join-Path $env:TEMP "install-codex.ps1"
+irm https://raw.githubusercontent.com/daxiondi/codex/main/scripts/install/install.ps1 -OutFile $script
+& $script -Repo daxiondi/codex -Version 0.118.0
+```
 
 ### Using Codex with your ChatGPT plan
 
