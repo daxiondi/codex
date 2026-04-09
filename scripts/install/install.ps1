@@ -171,19 +171,29 @@ try {
         Invoke-WebRequest -Uri $zipUrl -OutFile $zipPath
         Expand-Archive -Path $zipPath -DestinationPath $extractDir -Force
 
-        $copyMap = @{
-            "codex.exe" = "codex.exe"
-            "codex-command-runner.exe" = "codex-command-runner.exe"
-            "codex-windows-sandbox-setup.exe" = "codex-windows-sandbox-setup.exe"
-            "rg.exe" = "rg.exe"
-        }
+        $copyCandidates = @(
+            @{ Sources = @("codex.exe", "codex-$target.exe"); Destination = "codex.exe" },
+            @{ Sources = @("codex-command-runner.exe", "codex-command-runner-$target.exe"); Destination = "codex-command-runner.exe" },
+            @{ Sources = @("codex-windows-sandbox-setup.exe", "codex-windows-sandbox-setup-$target.exe"); Destination = "codex-windows-sandbox-setup.exe" },
+            @{ Sources = @("codex-responses-api-proxy.exe", "codex-responses-api-proxy-$target.exe"); Destination = "codex-responses-api-proxy.exe" },
+            @{ Sources = @("rg.exe"); Destination = "rg.exe" }
+        )
 
-        foreach ($relativeSource in $copyMap.Keys) {
-            $sourcePath = Join-Path $extractDir $relativeSource
-            if (-not (Test-Path $sourcePath)) {
+        foreach ($entry in $copyCandidates) {
+            $sourcePath = $null
+            foreach ($candidate in $entry.Sources) {
+                $candidatePath = Join-Path $extractDir $candidate
+                if (Test-Path $candidatePath) {
+                    $sourcePath = $candidatePath
+                    break
+                }
+            }
+
+            if (-not $sourcePath) {
                 continue
             }
-            $destinationPath = Join-Path $installDir $copyMap[$relativeSource]
+
+            $destinationPath = Join-Path $installDir $entry.Destination
             Move-Item -Force $sourcePath $destinationPath
         }
     }
