@@ -81,6 +81,33 @@ function Resolve-Version {
     return (Normalize-Version -RawVersion $release.tag_name)
 }
 
+function Download-File {
+    param(
+        [string]$Url,
+        [string]$OutFile
+    )
+
+    try {
+        Invoke-WebRequest -Uri $Url -OutFile $OutFile
+        $item = Get-Item $OutFile -ErrorAction SilentlyContinue
+        if ($item -and $item.Length -gt 0) {
+            return
+        }
+    } catch {
+        Write-Step "Invoke-WebRequest failed, retrying with curl.exe"
+    }
+
+    if (Get-Command curl.exe -ErrorAction SilentlyContinue) {
+        & curl.exe -L --fail --output $OutFile $Url
+        if ($LASTEXITCODE -eq 0) {
+            return
+        }
+    }
+
+    Write-Error "Failed to download $Url"
+    exit 1
+}
+
 if ($env:OS -ne "Windows_NT") {
     Write-Error "install.ps1 supports Windows only. Use install.sh on macOS or Linux."
     exit 1
@@ -146,7 +173,7 @@ try {
 
     try {
         Write-Step "Downloading Codex CLI package from $Repo"
-        Invoke-WebRequest -Uri $packageUrl -OutFile $archivePath
+        Download-File -Url $packageUrl -OutFile $archivePath
         tar -xzf $archivePath -C $extractDir
 
         $vendorRoot = Join-Path $extractDir "package/vendor/$target"
@@ -168,7 +195,7 @@ try {
         }
     } catch {
         Write-Step "Package asset unavailable, falling back to portable zip from $Repo"
-        Invoke-WebRequest -Uri $zipUrl -OutFile $zipPath
+        Download-File -Url $zipUrl -OutFile $zipPath
         Expand-Archive -Path $zipPath -DestinationPath $extractDir -Force
 
         $copyCandidates = @(
